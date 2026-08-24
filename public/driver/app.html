@@ -230,7 +230,8 @@
     }
 
     function connectAndTrack() {
-      ws = new WebSocket('ws://' + location.hostname + ':4567/track');
+      const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(wsProto + '//' + location.host + '/track');
       ws.onopen = () => {
         ws.send(JSON.stringify({ type: 'auth', token }));
         document.getElementById('connDot').classList.add('on');
