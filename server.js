@@ -122,6 +122,21 @@ app.delete('/api/users/:id', authMiddleware, adminOnly, (req, res) => {
   res.json({ ok: true });
 });
 
+app.put('/api/users/:id', authMiddleware, adminOnly, (req, res) => {
+  const user = db.users.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'Not found' });
+
+  const { name, username, password, busName, phone } = req.body;
+  if (name) user.name = name;
+  if (username) user.username = username;
+  if (password) user.password = bcrypt.hashSync(password, 10);
+  if (busName !== undefined) user.busName = busName;
+  if (phone !== undefined) user.phone = phone;
+
+  saveDB();
+  res.json({ ok: true });
+});
+
 const activeDrivers = new Map();
 const dashboardClients = new Set();
 const OFFLINE_TIMEOUT = 30000;
