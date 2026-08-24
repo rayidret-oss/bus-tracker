@@ -153,7 +153,8 @@
     let audioCtx = null;
 
     // WebSocket
-    const ws = new WebSocket('ws://' + location.hostname + ':4567/admin');
+    const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(wsProto + '//' + location.host + '/admin');
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       if (msg.type === 'init') msg.drivers.forEach(d => updateBus(d));
