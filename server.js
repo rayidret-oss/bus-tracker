@@ -14,12 +14,10 @@ const PORT = process.env.PORT || 4567;
 const JWT_SECRET = 'bus-tracker-najed-2024';
 const DB_FILE = path.join(__dirname, 'db.json');
 
-// --- Database ---
 let db = { users: [], buses: [] };
 if (fs.existsSync(DB_FILE)) {
   db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
 } else {
-  // Create default admin
   const adminHash = bcrypt.hashSync('admin123', 10);
   db.users.push({
     id: 'admin-1',
@@ -36,7 +34,6 @@ function saveDB() {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
 }
 
-// --- Middleware ---
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -56,7 +53,6 @@ function adminOnly(req, res, next) {
   next();
 }
 
-// --- Auth Routes ---
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body;
   const user = db.users.find(u => u.username === username);
@@ -85,7 +81,6 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
   res.json({ id: user.id, username: user.username, role: user.role, name: user.name, busName: user.busName });
 });
 
-// --- User Management (Admin) ---
 app.get('/api/users', authMiddleware, adminOnly, (req, res) => {
   const users = db.users.map(u => ({ id: u.id, username: u.username, role: u.role, name: u.name, busName: u.busName, phone: u.phone, createdAt: u.createdAt }));
   res.json(users);
@@ -97,16 +92,31 @@ app.delete('/api/users/:id', authMiddleware, adminOnly, (req, res) => {
   res.json({ ok: true });
 });
 
-// --- Bus Tracking ---
-const activeDrivers = new Map(); // driverId -> { ws, busData }
+const activeDrivers = new Map();
 const dashboardClients = new Set();
+const OFFLINE_TIMEOUT = 30000;
 
 function broadcast(data) {
   const msg = JSON.stringify(data);
   dashboardClients.forEach(c => { if (c.readyState === 1) c.send(msg); });
 }
 
-// --- HTTP POST location (from background service) ---
+function isDriverOnline(driver) {
+  if (!driver.data || !driver.data.timestamp) return false;
+  return (Date.now() - driver.data.timestamp) < OFFLINE_TIMEOUT;
+}
+
+function markOfflineIfExpired() {
+  activeDrivers.forEach((driver, id) => {
+    if (!isDriverOnline(driver) && driver._online) {
+      driver._online = false;
+      broadcast({ type: 'driverOffline', driverId: id });
+    }
+  });
+}
+
+setInterval(markOfflineIfExpired, 5000);
+
 app.post('/api/track', (req, res) => {
   try {
     const { token, lat, lng, speed, heading, speedLimit } = req.body;
@@ -115,13 +125,22 @@ app.post('/api/track', (req, res) => {
     const user = jwt.verify(token, JWT_SECRET);
     if (user.role !== 'driver') return res.status(403).json({ error: 'Not a driver' });
 
+    const existing = activeDrivers.get(user.id) || {};
     const data = { lat, lng, speed: speed || 0, heading: heading || 0, timestamp: Date.now() };
-    activeDrivers.set(user.id, { ...activeDrivers.get(user.id), name: user.name, data });
+
+    activeDrivers.set(user.id, {
+      ...existing,
+      name: user.name,
+      busName: user.busName || existing.busName || '',
+      data,
+      _online: true
+    });
 
     broadcast({
       type: 'driverUpdate',
       driverId: user.id,
       name: user.name,
+      busName: user.busName || existing.busName || '',
       ...data,
       online: true
     });
@@ -146,7 +165,6 @@ wss.on('connection', (ws, req) => {
   const url = req.url;
 
   if (url === '/track') {
-    // Driver tracking connection
     ws.on('message', (data) => {
       try {
         const msg = JSON.parse(data);
@@ -158,7 +176,16 @@ wss.on('connection', (ws, req) => {
 
             ws.userId = user.id;
             ws.userName = user.name;
-            activeDrivers.set(user.id, { ws, name: user.name });
+
+            const existing = activeDrivers.get(user.id) || {};
+            activeDrivers.set(user.id, {
+              ...existing,
+              ws,
+              name: user.name,
+              busName: user.busName || existing.busName || '',
+              _online: true
+            });
+
             ws.send(JSON.stringify({ type: 'authOk' }));
             console.log(`Driver connected: ${user.name}`);
           } catch (e) {
@@ -169,17 +196,19 @@ wss.on('connection', (ws, req) => {
         if (msg.type === 'location' && ws.userId) {
           const driver = activeDrivers.get(ws.userId);
           if (driver) {
-            driver.data = { lat: msg.lat, lng: msg.lng, speed: msg.speed || 0, heading: msg.heading || 0, timestamp: Date.now() };
+            const data = { lat: msg.lat, lng: msg.lng, speed: msg.speed || 0, heading: msg.heading || 0, timestamp: Date.now() };
+            driver.data = data;
+            driver._online = true;
 
             broadcast({
               type: 'driverUpdate',
               driverId: ws.userId,
               name: ws.userName,
-              ...driver.data,
+              busName: driver.busName || '',
+              ...data,
               online: true
             });
 
-            // Speed alert
             if (msg.speed > (msg.speedLimit || 80)) {
               broadcast({
                 type: 'speedAlert',
@@ -196,20 +225,31 @@ wss.on('connection', (ws, req) => {
 
     ws.on('close', () => {
       if (ws.userId) {
-        activeDrivers.delete(ws.userId);
-        broadcast({ type: 'driverOffline', driverId: ws.userId });
-        console.log(`Driver disconnected: ${ws.userId}`);
+        const driver = activeDrivers.get(ws.userId);
+        if (driver) {
+          driver.ws = null;
+          if (!isDriverOnline(driver)) {
+            driver._online = false;
+            broadcast({ type: 'driverOffline', driverId: ws.userId });
+          }
+        }
+        console.log(`Driver WS closed: ${ws.userId} (HTTP tracking may continue)`);
       }
     });
 
   } else if (url === '/admin') {
     dashboardClients.add(ws);
 
-    // Send current state
     const drivers = [];
     activeDrivers.forEach((driver, id) => {
       if (driver.data) {
-        drivers.push({ driverId: id, name: driver.name, ...driver.data, online: true });
+        drivers.push({
+          driverId: id,
+          name: driver.name,
+          busName: driver.busName || '',
+          ...driver.data,
+          online: isDriverOnline(driver)
+        });
       }
     });
     ws.send(JSON.stringify({ type: 'init', drivers }));
@@ -218,7 +258,6 @@ wss.on('connection', (ws, req) => {
   }
 });
 
-// --- Start ---
 server.listen(PORT, () => {
   console.log(`\n========================================`);
   console.log(`  Bus Tracker Pro - by Najed Al-Eizari`);
