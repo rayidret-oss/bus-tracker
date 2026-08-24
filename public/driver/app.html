@@ -247,9 +247,10 @@
       };
       ws.onclose = () => {
         document.getElementById('connDot').classList.remove('on');
-        document.getElementById('connText').textContent = 'غير متصل';
+        document.getElementById('connText').textContent = 'إعادة الاتصال...';
         setTimeout(connectAndTrack, 3000);
       };
+      ws.onerror = () => {};
     }
 
     function startGPS() {
@@ -262,6 +263,7 @@
       }
 
       if ('geolocation' in navigator) {
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
         watchId = navigator.geolocation.watchPosition(
           (pos) => {
             const { latitude: lat, longitude: lng, speed, heading, accuracy } = pos.coords;
@@ -276,6 +278,12 @@
 
             if (ws && ws.readyState === 1) {
               ws.send(JSON.stringify({ type: 'location', lat, lng, speed: speedKmh, heading: heading || 0, speedLimit }));
+            } else {
+              fetch('/api/track', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, lat, lng, speed: speedKmh, heading: heading || 0, speedLimit })
+              }).catch(() => {});
             }
 
             document.getElementById('locBar').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)} | دقة: ${(accuracy || 0).toFixed(0)}م`;
