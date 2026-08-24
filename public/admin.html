@@ -59,6 +59,7 @@
     .role.admin{background:#2563eb;color:#fff}
     .role.driver{background:#25d366;color:#fff}
     .user-row .del{background:#dc2626;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:10px}
+    .user-row .edit{background:#2563eb;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:10px;margin-right:4px}
   </style>
 </head>
 <body>
@@ -128,6 +129,23 @@
       <div class="users-list" id="usersList"></div>
       <div class="actions" style="margin-top:12px">
         <button class="btn-g" onclick="closeModals()" style="background:#25d366;color:#fff">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit User Modal -->
+  <div class="modal-overlay" id="editUserModal">
+    <div class="modal">
+      <h2>تعديل بيانات السائق</h2>
+      <input type="hidden" id="editUserId">
+      <div class="form-group"><label>الاسم</label><input id="editName" placeholder="اسم السائق"></div>
+      <div class="form-group"><label>اسم المستخدم</label><input id="editUsername" placeholder="username"></div>
+      <div class="form-group"><label>كلمة المرور الجديدة (اتركها فاضية للإبقاء)</label><input id="editPassword" type="password" placeholder="••••••"></div>
+      <div class="form-group"><label>اسم الحافلة</label><input id="editBusName" placeholder="الحافلة 101"></div>
+      <div class="form-group"><label>الجوال</label><input id="editPhone" placeholder="05XXXXXXXX"></div>
+      <div class="actions">
+        <button class="btn-g" onclick="saveEditUser()" style="background:#25d366;color:#fff">حفظ</button>
+        <button class="btn-r" onclick="closeModals()" style="background:#374151;color:#fff">إلغاء</button>
       </div>
     </div>
   </div>
@@ -297,10 +315,45 @@
         <div class="user-row">
           <span>${u.name}</span>
           <span style="color:#9ca3af;font-size:11px">@${u.username}</span>
+          ${u.busName ? `<span style="color:#6b7280;font-size:10px">🚌 ${u.busName}</span>` : ''}
           <span class="role ${u.role}">${u.role === 'admin' ? 'مدير' : 'سائق'}</span>
-          ${u.role !== 'admin' ? `<button class="del" onclick="deleteUser('${u.id}')">حذف</button>` : ''}
+          ${u.role !== 'admin' ? `
+            <button class="edit" onclick="editUser('${u.id}','${u.name.replace(/'/g,"\\'")}','${u.username}','${(u.busName||'').replace(/'/g,"\\'")}','${(u.phone||'').replace(/'/g,"\\'")}')">تعديل</button>
+            <button class="del" onclick="deleteUser('${u.id}')">حذف</button>
+          ` : ''}
         </div>
       `).join('');
+    }
+
+    function editUser(id, name, username, busName, phone) {
+      document.getElementById('editUserId').value = id;
+      document.getElementById('editName').value = name;
+      document.getElementById('editUsername').value = username;
+      document.getElementById('editPassword').value = '';
+      document.getElementById('editBusName').value = busName;
+      document.getElementById('editPhone').value = phone;
+      document.getElementById('editUserModal').classList.add('show');
+    }
+
+    async function saveEditUser() {
+      const id = document.getElementById('editUserId').value;
+      const body = {
+        name: document.getElementById('editName').value,
+        username: document.getElementById('editUsername').value,
+        busName: document.getElementById('editBusName').value,
+        phone: document.getElementById('editPhone').value
+      };
+      const pw = document.getElementById('editPassword').value;
+      if (pw) body.password = pw;
+
+      const res = await fetch('/api/users/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.ok) { closeModals(); loadUsers(); }
+      else alert(data.error);
     }
 
     async function deleteUser(id) {
