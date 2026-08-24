@@ -106,6 +106,42 @@ function broadcast(data) {
   dashboardClients.forEach(c => { if (c.readyState === 1) c.send(msg); });
 }
 
+// --- HTTP POST location (from background service) ---
+app.post('/api/track', (req, res) => {
+  try {
+    const { token, lat, lng, speed, heading, speedLimit } = req.body;
+    if (!token) return res.status(400).json({ error: 'No token' });
+
+    const user = jwt.verify(token, JWT_SECRET);
+    if (user.role !== 'driver') return res.status(403).json({ error: 'Not a driver' });
+
+    const data = { lat, lng, speed: speed || 0, heading: heading || 0, timestamp: Date.now() };
+    activeDrivers.set(user.id, { ...activeDrivers.get(user.id), name: user.name, data });
+
+    broadcast({
+      type: 'driverUpdate',
+      driverId: user.id,
+      name: user.name,
+      ...data,
+      online: true
+    });
+
+    if (speed > (speedLimit || 80)) {
+      broadcast({
+        type: 'speedAlert',
+        driverId: user.id,
+        name: user.name,
+        speed,
+        limit: speedLimit || 80
+      });
+    }
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
 wss.on('connection', (ws, req) => {
   const url = req.url;
 
