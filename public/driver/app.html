@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0b0e14">
+  <link rel="manifest" href="/driver/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <title>تتبع الحافلة - Driver</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Segoe UI',Tahoma,sans-serif;background:#0b0e14;color:#fff;height:100vh;display:flex;flex-direction:column;overflow:hidden;-webkit-user-select:none;user-select:none}
+
+    .screen{display:none;flex:1;flex-direction:column}
+    .screen.active{display:flex}
+
+    /* Login */
+    .login-screen{align-items:center;justify-content:center;padding:24px}
+    .login-box{width:100%;max-width:360px;text-align:center}
+    .login-box .icon{font-size:64px;margin-bottom:16px}
+    .login-box h1{font-size:22px;color:#25d366;margin-bottom:4px}
+    .login-box .sub{font-size:11px;color:#6b7280;margin-bottom:24px}
+    .login-box .sub span{color:#25d366}
+    .form-group{margin-bottom:14px;text-align:right}
+    .form-group label{display:block;font-size:12px;color:#9ca3af;margin-bottom:4px}
+    .form-group input{width:100%;padding:14px;border:2px solid #1f2937;border-radius:12px;background:#111827;color:#fff;font-size:16px}
+    .form-group input:focus{outline:none;border-color:#25d366}
+    .login-btn{width:100%;padding:16px;border:none;border-radius:12px;background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;font-size:18px;font-weight:700;cursor:pointer;margin-top:8px}
+    .login-btn:active{transform:scale(.98);filter:brightness(.9)}
+    .login-error{background:#7f1d1d;color:#f87171;padding:10px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none}
+    .login-error.show{display:block}
+
+    /* Tracker Screen */
+    .tracker-header{padding:14px 16px;background:#111827;border-bottom:2px solid #25d366;display:flex;align-items:center;justify-content:space-between}
+    .tracker-header .left{display:flex;align-items:center;gap:10px}
+    .tracker-header .bus-icon{width:36px;height:36px;background:#25d366;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px}
+    .tracker-header .bus-name{font-size:16px;font-weight:700}
+    .tracker-header .conn{font-size:10px;display:flex;align-items:center;gap:4px}
+    .conn-dot{width:8px;height:8px;border-radius:50%;background:#ef4444}
+    .conn-dot.on{background:#25d366;box-shadow:0 0 8px #25d366}
+    .logout-btn{background:#dc2626;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600}
+
+    .stats-row{display:flex;justify-content:space-around;padding:12px;background:#0f1419;border-bottom:1px solid #1f2937}
+    .stat-item{text-align:center}
+    .stat-item .val{font-size:20px;font-weight:800;color:#25d366}
+    .stat-item .lbl{font-size:10px;color:#6b7280}
+
+    .speed-section{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column}
+    .speed-ring{width:220px;height:220px;border-radius:50%;border:10px solid #1f2937;display:flex;align-items:center;justify-content:center;flex-direction:column;transition:border-color .5s,box-shadow .5s}
+    .speed-ring.good{border-color:#25d366;box-shadow:0 0 40px rgba(37,211,102,.2)}
+    .speed-ring.warn{border-color:#f59e0b;box-shadow:0 0 40px rgba(245,158,11,.3)}
+    .speed-ring.danger{border-color:#ef4444;box-shadow:0 0 50px rgba(239,68,68,.4);animation:pulseRing 1s infinite}
+    @keyframes pulseRing{0%,100%{box-shadow:0 0 50px rgba(239,68,68,.4)}50%{box-shadow:0 0 80px rgba(239,68,68,.6)}}
+    .speed-num{font-size:72px;font-weight:900;line-height:1;transition:color .3s}
+    .speed-unit{font-size:14px;color:#6b7280;margin-top:4px}
+    .limit-badge{margin-top:12px;padding:6px 16px;border-radius:20px;background:#1f2937;font-size:12px;color:#9ca3af}
+    .limit-badge span{color:#ef4444;font-weight:700}
+
+    .location-bar{padding:8px 16px;background:#0f1419;border-top:1px solid #1f2937;font-size:11px;color:#6b7280;text-align:center}
+
+    .bottom-controls{display:flex;gap:8px;padding:12px 16px;background:#111827}
+    .bottom-controls button{flex:1;padding:14px;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;transition:all .15s}
+    .bottom-controls button:active{transform:scale(.97)}
+    .ctrl-stop{background:#dc2626;color:#fff}
+    .ctrl-share{background:#2563eb;color:#fff}
+    .ctrl-map{background:#ea580c;color:#fff}
+
+    .alert-popup{position:fixed;top:60px;left:16px;right:16px;z-index:100;background:rgba(239,68,68,.95);color:#fff;padding:14px 20px;border-radius:12px;font-size:15px;font-weight:700;display:none;align-items:center;gap:10px;box-shadow:0 8px 32px rgba(239,68,68,.5)}
+    .alert-popup.show{display:flex;animation:alertIn .3s}
+    @keyframes alertIn{from{transform:translateY(-20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+    .install-prompt{position:fixed;bottom:0;left:0;right:0;z-index:100;background:#111827;padding:16px;border-top:2px solid #25d366;display:none;flex-direction:column;gap:10px}
+    .install-prompt.show{display:flex}
+    .install-prompt p{font-size:13px;color:#9ca3af;text-align:center}
+    .install-prompt button{padding:12px;border:none;border-radius:10px;background:#25d366;color:#fff;font-size:15px;font-weight:700}
+    .install-prompt .dismiss{background:transparent;color:#6b7280;font-size:12px}
+  </style>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div class="screen login-screen active" id="loginScreen">
+    <div class="login-box">
+      <div class="icon">🚌</div>
+      <h1>تتبع الحافلة</h1>
+      <div class="sub">Programmer: <span>Najed Al-Eizari</span></div>
+      <div class="login-error" id="loginError"></div>
+      <div class="form-group">
+        <label>اسم المستخدم</label>
+        <input type="text" id="loginUser" placeholder="Username">
+      </div>
+      <div class="form-group">
+        <label>كلمة المرور</label>
+        <input type="password" id="loginPass" placeholder="Password">
+      </div>
+      <button class="login-btn" onclick="doLogin()">🚀 دخول وبدء التتبع</button>
+    </div>
+  </div>
+
+  <!-- Tracker Screen -->
+  <div class="screen" id="trackerScreen">
+    <div class="tracker-header">
+      <div class="left">
+        <div class="bus-icon">🚌</div>
+        <div>
+          <div class="bus-name" id="myBusName">-</div>
+          <div class="conn"><span class="conn-dot" id="connDot"></span><span id="connText">غير متصل</span></div>
+        </div>
+      </div>
+      <button class="logout-btn" onclick="doLogout()">خروج</button>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-item"><div class="val" id="statDist">0.0</div><div class="lbl">المسافة (كم)</div></div>
+      <div class="stat-item"><div class="val" id="statTime">0:00</div><div class="lbl">الوقت</div></div>
+      <div class="stat-item"><div class="val" id="statAvg">0</div><div class="lbl">المتوسط</div></div>
+      <div class="stat-item"><div class="val" id="statMax">0</div><div class="lbl">الأقصى</div></div>
+    </div>
+
+    <div class="speed-section">
+      <div class="speed-ring good" id="speedRing">
+        <div class="speed-num" id="speedNum">0</div>
+        <div class="speed-unit">كم / ساعة</div>
+      </div>
+      <div class="limit-badge">حد السرعة: <span id="limitDisplay">80</span> كم/س</div>
+    </div>
+
+    <div class="location-bar" id="locBar">في الانتظار...</div>
+
+    <div class="bottom-controls">
+      <button class="ctrl-share" onclick="shareLocation()">📤 مشاركة</button>
+      <button class="ctrl-map" onclick="openMap()">🗺️ خريطة</button>
+    </div>
+
+    <div class="alert-popup" id="alertPopup">
+      <span style="font-size:20px">⚠️</span>
+      <span id="alertText">تنبيه!</span>
+    </div>
+
+    <div class="install-prompt" id="installPrompt">
+      <p>📱 ثبّت التطبيق على جوالك للحصول على أفضل تجربة</p>
+      <button onclick="installApp()">تثبيت التطبيق</button>
+      <button class="dismiss" onclick="dismissInstall()">لاحقاً</button>
+    </div>
+  </div>
+
+  <script>
+    const SERVER = location.origin;
+    let token = localStorage.getItem('driverToken');
+    let user = JSON.parse(localStorage.getItem('driverUser') || 'null');
+    let ws = null;
+    let watchId = null;
+    let tracking = false;
+    let totalDist = 0, lastLat = null, lastLng = null, startTime = null;
+    let speedLimit = 80, maxSpeed = 0;
+    let audioCtx = null;
+    let deferredPrompt = null;
+
+    // Auto login
+    if (token && user) { showTracker(); }
+
+    // PWA install prompt
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      document.getElementById('installPrompt').classList.add('show');
+    });
+
+    function installApp() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(() => { deferredPrompt = null; });
+      }
+      document.getElementById('installPrompt').classList.remove('show');
+    }
+
+    function dismissInstall() {
+      document.getElementById('installPrompt').classList.remove('show');
+    }
+
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/driver/sw.js').catch(() => {});
+    }
+
+    async function doLogin() {
+      const username = document.getElementById('loginUser').value;
+      const password = document.getElementById('loginPass').value;
+      const errEl = document.getElementById('loginError');
+
+      if (!username || !password) { errEl.textContent = 'أدخل البيانات'; errEl.classList.add('show'); return; }
+
+      try {
+        const res = await fetch(SERVER + '/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (!res.ok) { errEl.textContent = data.error; errEl.classList.add('show'); return; }
+        if (data.user.role !== 'driver') { errEl.textContent = 'حسابك ليس حساب سائق'; errEl.classList.add('show'); return; }
+
+        token = data.token;
+        user = data.user;
+        localStorage.setItem('driverToken', token);
+        localStorage.setItem('driverUser', JSON.stringify(user));
+        showTracker();
+      } catch (e) {
+        errEl.textContent = 'خطأ في الاتصال'; errEl.classList.add('show');
+      }
+    }
+
+    function doLogout() {
+      token = null; user = null;
+      localStorage.removeItem('driverToken');
+      localStorage.removeItem('driverUser');
+      if (ws) ws.close();
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      tracking = false;
+      document.getElementById('loginScreen').classList.add('active');
+      document.getElementById('trackerScreen').classList.remove('active');
+    }
+
+    function showTracker() {
+      document.getElementById('loginScreen').classList.remove('active');
+      document.getElementById('trackerScreen').classList.add('active');
+      document.getElementById('myBusName').textContent = user.busName || user.name;
+      connectAndTrack();
+    }
+
+    function connectAndTrack() {
+      ws = new WebSocket('ws://' + location.hostname + ':4567/track');
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'auth', token }));
+        document.getElementById('connDot').classList.add('on');
+        document.getElementById('connText').textContent = 'متصل';
+      };
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'authOk') { startGPS(); }
+        if (msg.type === 'error') { document.getElementById('connText').textContent = 'خطأ'; }
+      };
+      ws.onclose = () => {
+        document.getElementById('connDot').classList.remove('on');
+        document.getElementById('connText').textContent = 'غير متصل';
+        setTimeout(connectAndTrack, 3000);
+      };
+    }
+
+    function startGPS() {
+      if (tracking) return;
+      tracking = true;
+      startTime = Date.now();
+
+      if ('geolocation' in navigator) {
+        watchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            const { latitude: lat, longitude: lng, speed, heading, accuracy } = pos.coords;
+            const speedKmh = speed !== null ? Math.abs(speed * 3.6) : 0;
+
+            if (lastLat !== null) totalDist += haversine(lastLat, lastLng, lat, lng);
+            lastLat = lat; lastLng = lng;
+            if (speedKmh > maxSpeed) maxSpeed = speedKmh;
+
+            updateSpeedUI(speedKmh);
+            updateStats(speedKmh);
+
+            if (ws && ws.readyState === 1) {
+              ws.send(JSON.stringify({ type: 'location', lat, lng, speed: speedKmh, heading: heading || 0, speedLimit }));
+            }
+
+            document.getElementById('locBar').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)} | دقة: ${(accuracy || 0).toFixed(0)}م`;
+          },
+          (err) => { document.getElementById('locBar').textContent = 'خطأ GPS: ' + err.message; },
+          { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+        );
+      }
+
+      // Keep screen awake
+      if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(() => {});
+
+      // Request notification permission
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+    }
+
+    function updateSpeedUI(speed) {
+      const ring = document.getElementById('speedRing');
+      const num = document.getElementById('speedNum');
+      num.textContent = Math.round(speed);
+      ring.className = 'speed-ring';
+
+      if (speed > speedLimit) {
+        ring.classList.add('danger');
+        num.style.color = '#ef4444';
+        if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+        showSpeedAlert(speed);
+      } else if (speed > speedLimit * 0.8) {
+        ring.classList.add('warn');
+        num.style.color = '#f59e0b';
+      } else {
+        ring.classList.add('good');
+        num.style.color = '#fff';
+      }
+    }
+
+    function updateStats(speed) {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const h = Math.floor(elapsed / 3600);
+      const m = Math.floor((elapsed % 3600) / 60);
+      document.getElementById('statDist').textContent = (totalDist / 1000).toFixed(1);
+      document.getElementById('statTime').textContent = h + ':' + String(m).padStart(2, '0');
+      document.getElementById('statAvg').textContent = elapsed > 0 ? ((totalDist / 1000) / (elapsed / 3600)).toFixed(0) : '0';
+      document.getElementById('statMax').textContent = Math.round(maxSpeed);
+    }
+
+    function showSpeedAlert(speed) {
+      const popup = document.getElementById('alertPopup');
+      document.getElementById('alertText').textContent = `تنبيه! سرعتك ${Math.round(speed)} كم/س`;
+      popup.classList.add('show');
+      playSound();
+
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('⚠️ تنبيه سرعة!', { body: `سرعتك ${Math.round(speed)} كم/س`, icon: '/icons/icon-192.png' });
+      }
+
+      setTimeout(() => popup.classList.remove('show'), 5000);
+    }
+
+    function playSound() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      [800, 1000, 800].forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.frequency.value = freq; gain.gain.value = 0.3;
+        osc.start(audioCtx.currentTime + i * 0.2);
+        osc.stop(audioCtx.currentTime + i * 0.2 + 0.15);
+      });
+    }
+
+    function shareLocation() {
+      const url = `https://www.google.com/maps?q=${lastLat},${lastLng}`;
+      if (navigator.share) {
+        navigator.share({ title: user.busName || 'موقعي', text: 'موقع الحافلة', url });
+      } else {
+        navigator.clipboard.writeText(url);
+        alert('تم نسخ رابط الموقع!');
+      }
+    }
+
+    function openMap() {
+      window.open(`https://www.google.com/maps?q=${lastLat},${lastLng}`, '_blank');
+    }
+
+    function haversine(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    document.getElementById('loginPass').addEventListener('keypress', (e) => { if (e.key === 'Enter') doLogin(); });
+  </script>
+</body>
+</html>
