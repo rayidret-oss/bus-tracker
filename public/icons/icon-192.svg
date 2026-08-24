@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="32" fill="#0b0e14"/>
+  <circle cx="96" cy="80" r="50" fill="#25d366" opacity="0.15"/>
+  <text x="96" y="95" text-anchor="middle" font-size="60" fill="#25d366">🚌</text>
+  <text x="96" y="145" text-anchor="middle" font-size="16" fill="#fff" font-family="Arial" font-weight="bold">TRACKER</text>
+  <text x="96" y="165" text-anchor="middle" font-size="10" fill="#6b7280" font-family="Arial">Najed Al-Eizari</text>
+</svg>
