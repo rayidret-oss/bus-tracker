@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Bus Tracker - Setup</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Segoe UI',Tahoma,sans-serif;background:#0b0e14;color:#fff;height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .box{width:100%;max-width:400px;text-align:center}
+    .icon{font-size:72px;margin-bottom:12px}
+    h1{font-size:26px;color:#25d366;margin-bottom:4px}
+    .dev{font-size:12px;color:#6b7280;margin-bottom:30px}
+    .dev span{color:#25d366}
+    label{display:block;text-align:right;font-size:14px;color:#9ca3af;margin-bottom:8px}
+    input{width:100%;padding:16px;border:2px solid #1f2937;border-radius:14px;background:#111827;color:#fff;font-size:18px;text-align:center;direction:ltr}
+    input:focus{outline:none;border-color:#25d366}
+    input::placeholder{color:#4b5563}
+    .btn{width:100%;padding:18px;border:none;border-radius:14px;background:linear-gradient(135deg,#25d366,#128c7e);color:#fff;font-size:20px;font-weight:700;cursor:pointer;margin-top:16px;transition:all .15s}
+    .btn:active{transform:scale(.97);filter:brightness(.9)}
+    .or{margin:20px 0;color:#4b5563;font-size:13px}
+    .local-btn{width:100%;padding:14px;border:2px solid #1f2937;border-radius:14px;background:transparent;color:#25d366;font-size:16px;font-weight:600;cursor:pointer}
+    .local-btn:active{background:#111827}
+    .error{background:#7f1d1d;color:#f87171;padding:10px;border-radius:10px;font-size:13px;margin-top:12px;display:none}
+    .error.show{display:block}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div class="icon">🚌</div>
+    <h1>تتبع الحافلات</h1>
+    <div class="dev">Programmer: <span>Najed Al-Eizari</span></div>
+
+    <label>عنوان السيرفر:</label>
+    <input type="text" id="url" placeholder="https://example.trycloudflare.com">
+    <div class="error" id="error"></div>
+    <button class="btn" onclick="connect()">اتصال وبدء التتبع</button>
+
+    <div class="or">— أو —</div>
+
+    <button class="local-btn" onclick="connectLocal()">الاتصال بالسيرفر المحلي</button>
+  </div>
+
+  <script>
+    // Check if Android app saved a URL
+    let savedUrl = '';
+    try { savedUrl = localStorage.getItem('server_url') || ''; } catch(e) {}
+
+    if (savedUrl) {
+      window.location.href = savedUrl + '/driver/app.html';
+    }
+
+    function connect() {
+      let url = document.getElementById('url').value.trim();
+      if (!url) {
+        showError('اكتب عنوان السيرفر');
+        return;
+      }
+      if (!url.startsWith('http')) url = 'http://' + url;
+      if (url.endsWith('/')) url = url.substring(0, url.length - 1);
+
+      try { localStorage.setItem('server_url', url); } catch(e) {}
+      // Also try to save via Android interface
+      try { if (window.Android) Android.saveUrl(url); } catch(e) {}
+
+      window.location.href = url + '/driver/app.html';
+    }
+
+    function connectLocal() {
+      window.location.href = 'http://localhost:4567/driver/app.html';
+    }
+
+    function showError(msg) {
+      var el = document.getElementById('error');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(function() { el.classList.remove('show'); }, 3000);
+    }
+
+    document.getElementById('url').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') connect();
+    });
+  </script>
+</body>
+</html>
