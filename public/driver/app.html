@@ -218,6 +218,9 @@
       if (ws) ws.close();
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
       tracking = false;
+      if (window.Android && Android.stopBackgroundTracking) {
+        Android.stopBackgroundTracking();
+      }
       document.getElementById('loginScreen').classList.add('active');
       document.getElementById('trackerScreen').classList.remove('active');
     }
@@ -253,6 +256,10 @@
       if (tracking) return;
       tracking = true;
       startTime = Date.now();
+
+      if (window.Android && Android.startBackgroundTracking) {
+        Android.startBackgroundTracking(token, user.busId || user.username, speedLimit);
+      }
 
       if ('geolocation' in navigator) {
         watchId = navigator.geolocation.watchPosition(
