@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة تحكم المدير - Bus Tracker</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.fullscreen@1.6.0/Control.FullScreen.css"/>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Segoe UI',Tahoma,sans-serif;background:#0b0e14;color:#fff;height:100vh;overflow:hidden}
+    #map{width:100%;height:100%;z-index:1}
+
+    .top-bar{position:fixed;top:0;left:0;right:0;z-index:1000;background:rgba(17,24,39,.95);backdrop-filter:blur(10px);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #25d366}
+    .top-bar h1{font-size:18px;color:#25d366}.top-bar .dev{font-size:10px;color:#6b7280}.top-bar .dev span{color:#25d366}
+    .stats{display:flex;gap:16px;font-size:12px;color:#9ca3af}.stats b{color:#25d366}
+    .top-actions{display:flex;gap:8px}
+    .top-actions button{padding:6px 14px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}
+    .btn-g{background:#25d366;color:#fff}.btn-r{background:#dc2626;color:#fff}.btn-b{background:#2563eb;color:#fff}.btn-o{background:#ea580c;color:#fff}.btn-p{background:#8b5cf6;color:#fff}
+
+    .panel{position:fixed;top:56px;z-index:1000;background:rgba(17,24,39,.95);backdrop-filter:blur(10px);border-radius:14px;padding:14px;border:1px solid #1f2937;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+    .right-panel{right:10px;width:260px;max-height:calc(100vh - 70px);overflow-y:auto}
+    .right-panel::-webkit-scrollbar{width:4px}.right-panel::-webkit-scrollbar-thumb{background:#374151;border-radius:2px}
+    .left-panel{left:10px;width:200px}
+    .left-panel h3{font-size:12px;color:#6b7280;margin-bottom:8px}
+
+    .bus-item{display:flex;align-items:center;gap:8px;padding:8px;background:#0f1419;border-radius:8px;margin-bottom:4px;cursor:pointer;border:1px solid transparent;transition:all .15s}
+    .bus-item:hover,.bus-item.active{border-color:#25d366;background:#0a1a0a}
+    .bus-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .bus-dot.online{background:#25d366;box-shadow:0 0 6px #25d366}
+    .bus-dot.offline{background:#6b7280}
+    .bus-dot.over{background:#ef4444;animation:blink .5s infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+    .bus-item-info{flex:1}.bus-item-info .nm{font-size:12px;font-weight:700;color:#fff}.bus-item-info .dt{font-size:10px;color:#9ca3af}
+
+    .alert-banner{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:2000;background:rgba(239,68,68,.95);color:#fff;padding:12px 24px;border-radius:12px;font-size:14px;font-weight:700;display:none;align-items:center;gap:10px;box-shadow:0 8px 32px rgba(239,68,68,.4)}
+    .alert-banner.show{display:flex;animation:slideIn .3s}
+    @keyframes slideIn{from{transform:translateX(-50%) translateY(-20px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}
+
+    .speed-info{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(17,24,39,.95);padding:10px 20px;border-radius:12px;display:none;gap:20px;font-size:12px;border:1px solid #1f2937}
+    .speed-info.show{display:flex}
+    .speed-info .si{text-align:center}.speed-info .si .v{font-size:18px;font-weight:800;color:#fff}.speed-info .si .l{font-size:10px;color:#6b7280}
+
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:3000;display:none;align-items:center;justify-content:center}
+    .modal-overlay.show{display:flex}
+    .modal{background:#111827;border-radius:16px;padding:24px;width:400px;max-width:90vw;border:1px solid #1f2937}
+    .modal h2{font-size:18px;color:#25d366;margin-bottom:16px}
+    .modal .form-group{margin-bottom:12px}
+    .modal label{display:block;font-size:12px;color:#9ca3af;margin-bottom:4px}
+    .modal input,.modal select{width:100%;padding:10px 14px;border:1px solid #1f2937;border-radius:8px;background:#0b0e14;color:#fff;font-size:14px}
+    .modal input:focus,.modal select:focus{outline:none;border-color:#25d366}
+    .modal .actions{display:flex;gap:8px;margin-top:16px}
+    .modal .actions button{flex:1;padding:10px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+
+    .users-list{max-height:300px;overflow-y:auto;margin-top:8px}
+    .users-list::-webkit-scrollbar{width:4px}.users-list::-webkit-scrollbar-thumb{background:#374151}
+    .user-row{display:flex;align-items:center;justify-content:space-between;padding:8px;background:#0f1419;border-radius:6px;margin-bottom:4px;font-size:12px}
+    .user-row .role{padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
+    .role.admin{background:#2563eb;color:#fff}
+    .role.driver{background:#25d366;color:#fff}
+    .user-row .del{background:#dc2626;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:10px}
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div>
+      <h1>🚌 لوحة تحكم المدير</h1>
+      <div class="dev">by <span>Najed Al-Eizari</span></div>
+    </div>
+    <div class="stats">
+      <span>متصلة: <b id="onlineCount">0</b></span>
+      <span>تتحرك: <b id="movingCount">0</b></span>
+      <span>متوقفة: <b id="stoppedCount">0</b></span>
+    </div>
+    <div class="top-actions">
+      <button class="btn-p" onclick="showUsersModal()">👥 المستخدمون</button>
+      <button class="btn-o" onclick="showAddUser()">+ سائق</button>
+      <button class="btn-r" onclick="logout()">خروج</button>
+    </div>
+  </div>
+
+  <div class="panel right-panel" id="busPanel">
+    <div style="font-size:12px;color:#6b7280;margin-bottom:8px">الحافلات المتصلة</div>
+    <div id="busList"><div style="text-align:center;padding:20px;color:#4b5563;font-size:12px">لا توجد حافلات</div></div>
+  </div>
+
+  <div class="panel left-panel" id="speedPanel" style="display:none">
+    <h3>معلومات الحافلة</h3>
+    <div style="text-align:center">
+      <div id="selBusName" style="font-size:16px;font-weight:800;color:#25d366;margin:8px 0">-</div>
+      <div id="selBusSpeed" style="font-size:36px;font-weight:900;color:#fff">0</div>
+      <div style="font-size:11px;color:#6b7280">كم/ساعة</div>
+    </div>
+  </div>
+
+  <div class="alert-banner" id="alertBanner">
+    <span style="font-size:20px">⚠️</span>
+    <span id="alertText">تنبيه!</span>
+  </div>
+
+  <div class="speed-info" id="speedInfo">
+    <div class="si"><div class="v" id="siSpeed">0</div><div class="l">السرعة</div></div>
+    <div class="si"><div class="v" id="siLat">-</div><div class="l">خط العرض</div></div>
+    <div class="si"><div class="v" id="siLng">-</div><div class="l">خط الطول</div></div>
+    <div class="si"><div class="v" id="siTime">-</div><div class="l">آخر تحديث</div></div>
+  </div>
+
+  <!-- Add User Modal -->
+  <div class="modal-overlay" id="addUserModal">
+    <div class="modal">
+      <h2>إضافة سائق جديد</h2>
+      <div class="form-group"><label>الاسم</label><input id="newName" placeholder="اسم السائق"></div>
+      <div class="form-group"><label>اسم المستخدم</label><input id="newUsername" placeholder="username"></div>
+      <div class="form-group"><label>كلمة المرور</label><input id="newPassword" type="password" placeholder="••••••"></div>
+      <div class="form-group"><label>اسم الحافلة</label><input id="newBusName" placeholder="الحافلة 101"></div>
+      <div class="form-group"><label>الجوال</label><input id="newPhone" placeholder="05XXXXXXXX"></div>
+      <div class="actions">
+        <button class="btn-g" onclick="addUser()" style="background:#25d366;color:#fff">إضافة</button>
+        <button class="btn-r" onclick="closeModals()" style="background:#374151;color:#fff">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Users Modal -->
+  <div class="modal-overlay" id="usersModal">
+    <div class="modal" style="width:500px">
+      <h2>إدارة المستخدمين</h2>
+      <div class="users-list" id="usersList"></div>
+      <div class="actions" style="margin-top:12px">
+        <button class="btn-g" onclick="closeModals()" style="background:#25d366;color:#fff">إغلاق</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.fullscreen@1.6.0/Control.FullScreen.js"></script>
+  <script>
+    const token = localStorage.getItem('token');
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+    if (!token || !user || user.role !== 'admin') { window.location.href = '/login.html'; }
+
+    const map = L.map('map', { center: [24.7136, 46.6753], zoom: 12, zoomControl: false, fullscreenControl: true });
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© CartoDB', maxZoom: 19 }).addTo(map);
+    L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
+
+    const markers = {};
+    const trails = {};
+    const busData = {};
+    let selectedBus = null;
+    let audioCtx = null;
+
+    // WebSocket
+    const ws = new WebSocket('ws://' + location.hostname + ':4567/admin');
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'init') msg.drivers.forEach(d => updateBus(d));
+      else if (msg.type === 'driverUpdate') updateBus(msg);
+      else if (msg.type === 'driverOffline') offlineBus(msg.driverId);
+      else if (msg.type === 'speedAlert') showAlert(msg.name, msg.speed);
+    };
+    ws.onclose = () => setTimeout(() => location.reload(), 3000);
+
+    function updateBus(d) {
+      busData[d.driverId] = d;
+
+      if (!markers[d.driverId]) {
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="width:36px;height:36px;background:${getRandomColor(d.driverId)};border-radius:50%;border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:18px;transition:all .3s">🚌</div>`,
+          iconSize: [36, 36], iconAnchor: [18, 18]
+        });
+        markers[d.driverId] = L.marker([d.lat, d.lng], { icon }).addTo(map);
+        markers[d.driverId].on('click', () => selectBus(d.driverId));
+        trails[d.driverId] = L.polyline([], { weight: 3, opacity: 0.5 }).addTo(map);
+      } else {
+        markers[d.driverId].setLatLng([d.lat, d.lng]);
+      }
+
+      if (trails[d.driverId]) {
+        const pts = trails[d.driverId].getLatLngs();
+        pts.push([d.lat, d.lng]);
+        if (pts.length > 200) pts.shift();
+        trails[d.driverId].setLatLngs(pts);
+      }
+
+      updateBusList();
+    }
+
+    function offlineBus(id) {
+      if (busData[id]) busData[id].online = false;
+      updateBusList();
+    }
+
+    function selectBus(id) {
+      selectedBus = id;
+      const d = busData[id];
+      map.setView([d.lat, d.lng], Math.max(map.getZoom(), 15));
+      document.getElementById('speedPanel').style.display = 'block';
+      document.getElementById('selBusName').textContent = d.name;
+      document.getElementById('selBusSpeed').textContent = Math.round(d.speed);
+      document.getElementById('selBusSpeed').style.color = d.speed > 80 ? '#ef4444' : '#fff';
+
+      document.getElementById('siSpeed').textContent = Math.round(d.speed) + ' كم/س';
+      document.getElementById('siLat').textContent = d.lat.toFixed(6);
+      document.getElementById('siLng').textContent = d.lng.toFixed(6);
+      document.getElementById('siTime').textContent = new Date(d.timestamp).toLocaleTimeString('ar');
+      document.getElementById('speedInfo').classList.add('show');
+    }
+
+    function updateBusList() {
+      const list = document.getElementById('busList');
+      const ids = Object.keys(busData);
+      let online = 0, moving = 0, stopped = 0;
+
+      if (ids.length === 0) {
+        list.innerHTML = '<div style="text-align:center;padding:20px;color:#4b5563;font-size:12px">لا توجد حافلات متصلة</div>';
+      } else {
+        list.innerHTML = '';
+        ids.forEach(id => {
+          const d = busData[id];
+          if (d.online !== false) online++;
+          if (d.speed > 5) moving++; else stopped++;
+
+          const dotCls = d.speed > 80 ? 'over' : d.online !== false ? 'online' : 'offline';
+          const div = document.createElement('div');
+          div.className = 'bus-item' + (selectedBus === id ? ' active' : '');
+          div.innerHTML = `<div class="bus-dot ${dotCls}"></div><div class="bus-item-info"><div class="nm">${d.name}</div><div class="dt">${Math.round(d.speed)} كم/س | ${d.lat?.toFixed(4)}, ${d.lng?.toFixed(4)}</div></div>`;
+          div.onclick = () => selectBus(id);
+          list.appendChild(div);
+        });
+      }
+
+      document.getElementById('onlineCount').textContent = online;
+      document.getElementById('movingCount').textContent = moving;
+      document.getElementById('stoppedCount').textContent = stopped;
+    }
+
+    function getRandomColor(id) {
+      const colors = ['#25d366','#2563eb','#ea580c','#8b5cf6','#06b6d4','#f59e0b','#ec4899','#14b8a6'];
+      let hash = 0;
+      for (let i = 0; i < id.length; i++) hash = ((hash << 5) - hash) + id.charCodeAt(i);
+      return colors[Math.abs(hash) % colors.length];
+    }
+
+    function showAlert(name, speed) {
+      document.getElementById('alertText').textContent = `${name} تجاوزت السرعة! ${Math.round(speed)} كم/س`;
+      document.getElementById('alertBanner').classList.add('show');
+      playSound();
+      setTimeout(() => document.getElementById('alertBanner').classList.remove('show'), 4000);
+    }
+
+    function playSound() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.frequency.value = 800; gain.gain.value = 0.3;
+      osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+    }
+
+    // User management
+    function showAddUser() { document.getElementById('addUserModal').classList.add('show'); }
+    function closeModals() { document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('show')); }
+
+    async function addUser() {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({
+          username: document.getElementById('newUsername').value,
+          password: document.getElementById('newPassword').value,
+          name: document.getElementById('newName').value,
+          busName: document.getElementById('newBusName').value,
+          phone: document.getElementById('newPhone').value,
+          role: 'driver'
+        })
+      });
+      const data = await res.json();
+      if (data.ok) { closeModals(); alert('تمت الإضافة!'); loadUsers(); }
+      else alert(data.error);
+    }
+
+    async function showUsersModal() {
+      document.getElementById('usersModal').classList.add('show');
+      await loadUsers();
+    }
+
+    async function loadUsers() {
+      const res = await fetch('/api/users', { headers: { 'Authorization': 'Bearer ' + token } });
+      const users = await res.json();
+      const list = document.getElementById('usersList');
+      list.innerHTML = users.map(u => `
+        <div class="user-row">
+          <span>${u.name}</span>
+          <span style="color:#9ca3af;font-size:11px">@${u.username}</span>
+          <span class="role ${u.role}">${u.role === 'admin' ? 'مدير' : 'سائق'}</span>
+          ${u.role !== 'admin' ? `<button class="del" onclick="deleteUser('${u.id}')">حذف</button>` : ''}
+        </div>
+      `).join('');
+    }
+
+    async function deleteUser(id) {
+      if (!confirm('هل أنت متأكد؟')) return;
+      await fetch('/api/users/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } });
+      loadUsers();
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login.html';
+    }
+  </script>
+</body>
+</html>
