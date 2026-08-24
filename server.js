@@ -17,18 +17,33 @@ const DB_FILE = path.join(__dirname, 'db.json');
 let db = { users: [], buses: [] };
 if (fs.existsSync(DB_FILE)) {
   db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-} else {
-  const adminHash = bcrypt.hashSync('admin123', 10);
-  db.users.push({
-    id: 'admin-1',
-    username: 'admin',
-    password: adminHash,
-    role: 'admin',
-    name: 'المدير',
-    createdAt: Date.now()
-  });
-  saveDB();
 }
+
+const defaultUsers = [
+  { id: 'admin-1', username: 'admin', password: 'admin123', role: 'admin', name: 'المدير' },
+  { id: 'driver-1', username: 'driver1', password: '123', role: 'driver', name: 'سائق 1', busName: 'حافلة 1' },
+  { id: 'driver-2', username: 'driver2', password: '123', role: 'driver', name: 'سائق 2', busName: 'حافلة 2' },
+  { id: 'driver-3', username: 'driver3', password: '123', role: 'driver', name: 'سائق 3', busName: 'حافلة 3' },
+  { id: 'driver-4', username: 'driver4', password: '123', role: 'driver', name: 'سائق 4', busName: 'حافلة 4' },
+  { id: 'driver-5', username: 'driver5', password: '123', role: 'driver', name: 'سائق 5', busName: 'حافلة 5' }
+];
+
+let needsSave = false;
+for (const du of defaultUsers) {
+  if (!db.users.find(u => u.username === du.username)) {
+    db.users.push({
+      id: du.id,
+      username: du.username,
+      password: bcrypt.hashSync(du.password, 10),
+      role: du.role,
+      name: du.name,
+      busName: du.busName || '',
+      createdAt: Date.now()
+    });
+    needsSave = true;
+  }
+}
+if (needsSave) saveDB();
 
 function saveDB() {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
