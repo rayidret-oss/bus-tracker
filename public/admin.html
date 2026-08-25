@@ -183,6 +183,14 @@
     };
     ws.onclose = () => setTimeout(() => location.reload(), 3000);
 
+    // Fallback: poll server every 10s in case WS drops
+    setInterval(() => {
+      if (ws.readyState !== 1) return;
+      fetch('/api/ping').then(r => r.json()).then(d => {
+        document.getElementById('onlineCount').textContent = d.drivers || 0;
+      }).catch(() => {});
+    }, 10000);
+
     function updateBus(d) {
       busData[d.driverId] = d;
 
