@@ -165,6 +165,22 @@ app.get('/api/ping', (req, res) => {
   res.json({ ok: true, time: Date.now(), drivers: activeDrivers.size });
 });
 
+app.get('/api/public/track', (req, res) => {
+  const drivers = [];
+  activeDrivers.forEach((driver, id) => {
+    if (driver.data && isDriverOnline(driver)) {
+      drivers.push({
+        driverId: id,
+        name: driver.name,
+        busName: driver.busName || '',
+        ...driver.data,
+        online: true
+      });
+    }
+  });
+  res.json({ drivers });
+});
+
 setInterval(markOfflineIfExpired, 5000);
 
 setInterval(() => {
