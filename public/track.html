@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0b0e14">
+  <title>تتبع الحافلة - للأهل</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Segoe UI',Tahoma,sans-serif;background:#0b0e14;color:#fff;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+    .header{padding:14px 16px;background:#111827;border-bottom:2px solid #25d366;display:flex;align-items:center;justify-content:space-between}
+    .header .title{display:flex;align-items:center;gap:10px}
+    .header .title h1{font-size:16px;color:#25d366}
+    .header .badge{font-size:11px;background:#25d366;color:#0b0e14;padding:3px 8px;border-radius:10px;font-weight:700}
+    .header .subtitle{font-size:10px;color:#6b7280}
+
+    #map{flex:1;width:100%}
+
+    .bus-panel{position:fixed;bottom:0;left:0;right:0;background:#111827;border-top:2px solid #25d366;padding:16px;border-radius:16px 16px 0 0;display:none;transform:translateY(100%);transition:transform .3s}
+    .bus-panel.show{display:block;transform:translateY(0)}
+    .bus-panel .handle{width:40px;height:4px;background:#374151;border-radius:4px;margin:0 auto 12px}
+    .bus-panel .name{font-size:18px;font-weight:700;color:#25d366;margin-bottom:8px}
+    .bus-panel .info{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .bus-panel .info-item{background:#0f1419;padding:10px;border-radius:10px;text-align:center}
+    .bus-panel .info-item .val{font-size:16px;font-weight:700;color:#fff}
+    .bus-panel .info-item .lbl{font-size:10px;color:#6b7280;margin-top:2px}
+    .bus-panel .close{width:100%;padding:12px;border:none;border-radius:10px;background:#374151;color:#fff;font-size:14px;font-weight:600;margin-top:12px;cursor:pointer}
+    .bus-panel .status-online{color:#25d366}
+    .bus-panel .status-offline{color:#ef4444}
+
+    .no-buses{text-align:center;padding:40px;color:#6b7280;font-size:14px}
+
+    .refresh-bar{padding:6px;text-align:center;background:#0f1419;font-size:10px;color:#6b7280;border-top:1px solid #1f2937}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">
+      <div style="font-size:24px">🚌</div>
+      <div>
+        <h1>تتبع الحافلة</h1>
+        <div class="subtitle">متابعة مباشرة لأولياء الأمور</div>
+      </div>
+    </div>
+    <div class="badge" id="countBadge">0 حافلة</div>
+  </div>
+
+  <div id="map"></div>
+
+  <div class="bus-panel" id="busPanel">
+    <div class="handle"></div>
+    <div class="name" id="panelName">-</div>
+    <div class="info">
+      <div class="info-item"><div class="val" id="panelSpeed">0</div><div class="lbl">السرعة (كم/س)</div></div>
+      <div class="info-item"><div class="val" id="panelStatus">-</div><div class="lbl">الحالة</div></div>
+      <div class="info-item"><div class="val" id="panelLat">0</div><div class="lbl">خط العرض</div></div>
+      <div class="info-item"><div class="val" id="panelLng">0</div><div class="lbl">خط الطول</div></div>
+    </div>
+    <button class="close" onclick="closePanel()">إغلاق</button>
+  </div>
+
+  <div class="refresh-bar">يتحدث تلقائياً كل 5 ثوانٍ | تصميم: نجاد العيزري</div>
+
+  <script>
+    const map = L.map('map', { center: [24.7136, 46.6753], zoom: 12, zoomControl: false });
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© CartoDB', maxZoom: 19 }).addTo(map);
+
+    const markers = {};
+    const busData = {};
+    const colors = ['#25d366','#2563eb','#ea580c','#8b5cf6','#06b6d4','#f59e0b','#ec4899','#14b8a6'];
+
+    function getColor(id) {
+      let h = 0;
+      for (let i = 0; i < id.length; i++) h = ((h << 5) - h) + id.charCodeAt(i);
+      return colors[Math.abs(h) % colors.length];
+    }
+
+    function getColorBySpeed(speed) {
+      return speed > 80 ? '#ef4444' : speed > 60 ? '#f59e0b' : '#25d366';
+    }
+
+    const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(wsProto + '//' + location.host + '/admin');
+
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'init') {
+        msg.drivers.forEach(d => updateBus(d));
+      } else if (msg.type === 'driverUpdate') {
+        updateBus(msg);
+      } else if (msg.type === 'driverOffline') {
+        if (markers[msg.driverId]) {
+          markers[msg.driverId].getElement().style.opacity = '0.3';
+        }
+        if (busData[msg.driverId]) busData[msg.driverId].online = false;
+      }
+    };
+
+    ws.onclose = () => {
+      setTimeout(() => location.reload(), 5000);
+    };
+
+    // Fallback poll
+    setInterval(() => {
+      if (ws.readyState !== 1) return;
+      fetch('/api/ping').then(r => r.json()).then(d => {
+        document.getElementById('countBadge').textContent = d.drivers + ' حافلة';
+      }).catch(() => {});
+    }, 5000);
+
+    function updateBus(d) {
+      busData[d.driverId] = d;
+
+      if (!markers[d.driverId]) {
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="width:40px;height:40px;background:${getColor(d.driverId)};border-radius:50%;border:3px solid ${getColorBySpeed(d.speed)};box-shadow:0 0 12px ${getColorBySpeed(d.speed)};display:flex;align-items:center;justify-content:center;font-size:20px;transition:all .3s">🚌</div>`,
+          iconSize: [40, 40], iconAnchor: [20, 20]
+        });
+        markers[d.driverId] = L.marker([d.lat, d.lng], { icon }).addTo(map);
+        markers[d.driverId].on('click', () => showPanel(d.driverId));
+      } else {
+        markers[d.driverId].setLatLng([d.lat, d.lng]);
+        const el = markers[d.driverId].getElement();
+        if (el) {
+          el.querySelector('div').style.borderColor = getColorBySpeed(d.speed);
+          el.querySelector('div').style.boxShadow = `0 0 12px ${getColorBySpeed(d.speed)}`;
+        }
+      }
+
+      const count = Object.keys(busData).length;
+      document.getElementById('countBadge').textContent = count + ' حافلة';
+    }
+
+    function showPanel(id) {
+      const d = busData[id];
+      if (!d) return;
+      document.getElementById('panelName').textContent = d.busName || d.name;
+      document.getElementById('panelSpeed').textContent = Math.round(d.speed) + ' كم/س';
+      document.getElementById('panelSpeed').style.color = d.speed > 80 ? '#ef4444' : '#fff';
+      document.getElementById('panelStatus').innerHTML = d.online !== false ? '<span class="status-online">متصلة ●</span>' : '<span class="status-offline">غير متصلة ●</span>';
+      document.getElementById('panelLat').textContent = d.lat?.toFixed(5);
+      document.getElementById('panelLng').textContent = d.lng?.toFixed(5);
+      document.getElementById('busPanel').classList.add('show');
+      map.setView([d.lat, d.lng], Math.max(map.getZoom(), 15));
+    }
+
+    function closePanel() {
+      document.getElementById('busPanel').classList.remove('show');
+    }
+
+    // Auto refresh
+    setInterval(() => { for (const id in busData) updateBus(busData[id]); }, 5000);
+  </script>
+</body>
+</html>
