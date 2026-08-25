@@ -14,9 +14,10 @@ const PORT = process.env.PORT || 4567;
 const JWT_SECRET = 'bus-tracker-najed-2024';
 const DB_FILE = path.join(__dirname, 'db.json');
 
-let db = { users: [], buses: [] };
+let db = { users: [], buses: [], drivers: {} };
 if (fs.existsSync(DB_FILE)) {
   db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+  if (!db.drivers) db.drivers = {};
 }
 
 const defaultUsers = [
@@ -166,6 +167,16 @@ app.get('/api/ping', (req, res) => {
 
 setInterval(markOfflineIfExpired, 5000);
 
+setInterval(() => {
+  const http2 = require('http');
+  const https2 = require('https');
+  try {
+    const mod = process.env.PORT ? https2 : http2;
+    const host = process.env.PORT ? 'bus-tracker-k8wh.onrender.com' : 'localhost:' + PORT;
+    mod.get('http://' + host + '/api/ping', () => {}).on('error', () => {});
+  } catch(e) {}
+}, 14 * 60 * 1000);
+
 app.post('/api/track', (req, res) => {
   try {
     const { token, lat, lng, speed, heading, speedLimit } = req.body;
@@ -184,6 +195,9 @@ app.post('/api/track', (req, res) => {
       data,
       _online: true
     });
+
+    db.drivers[user.id] = { name: user.name, busName: user.busName || existing.busName || '', data };
+    saveDB();
 
     broadcast({
       type: 'driverUpdate',
@@ -308,6 +322,17 @@ wss.on('connection', (ws, req) => {
 });
 
 server.listen(PORT, () => {
+  for (const [id, d] of Object.entries(db.drivers || {})) {
+    if (d.data) {
+      const age = Date.now() - (d.data.timestamp || 0);
+      activeDrivers.set(id, {
+        name: d.name,
+        busName: d.busName || '',
+        data: d.data,
+        _online: age < OFFLINE_TIMEOUT
+      });
+    }
+  }
   console.log(`\n========================================`);
   console.log(`  Bus Tracker Pro - by Najed Al-Eizari`);
   console.log(`========================================`);
