@@ -160,6 +160,10 @@ function markOfflineIfExpired() {
   });
 }
 
+app.get('/api/ping', (req, res) => {
+  res.json({ ok: true, time: Date.now(), drivers: activeDrivers.size });
+});
+
 setInterval(markOfflineIfExpired, 5000);
 
 app.post('/api/track', (req, res) => {
