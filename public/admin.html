@@ -162,12 +162,13 @@
 
     const map = L.map('map', { center: [24.7136, 46.6753], zoom: 12, zoomControl: false, fullscreenControl: true });
     L.control.zoom({ position: 'bottomright' }).addTo(map);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© CartoDB', maxZoom: 19 }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(map);
     L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
 
     const markers = {};
     const trails = {};
     const busData = {};
+    const hiddenBuses = new Set();
     let selectedBus = null;
     let audioCtx = null;
 
@@ -222,6 +223,19 @@
       updateBusList();
     }
 
+    function toggleBus(id) {
+      if (hiddenBuses.has(id)) {
+        hiddenBuses.delete(id);
+        if (markers[id]) markers[id].setOpacity(1);
+        if (trails[id]) trails[id].setStyle({ opacity: 0.5 });
+      } else {
+        hiddenBuses.add(id);
+        if (markers[id]) markers[id].setOpacity(0.15);
+        if (trails[id]) trails[id].setStyle({ opacity: 0.05 });
+      }
+      updateBusList();
+    }
+
     function selectBus(id) {
       selectedBus = id;
       const d = busData[id];
@@ -253,9 +267,10 @@
           if (d.speed > 5) moving++; else stopped++;
 
           const dotCls = d.speed > 80 ? 'over' : d.online !== false ? 'online' : 'offline';
+          const isHidden = hiddenBuses.has(id);
           const div = document.createElement('div');
           div.className = 'bus-item' + (selectedBus === id ? ' active' : '');
-          div.innerHTML = `<div class="bus-dot ${dotCls}"></div><div class="bus-item-info"><div class="nm">${d.name}</div><div class="dt">${Math.round(d.speed)} كم/س | ${d.lat?.toFixed(4)}, ${d.lng?.toFixed(4)}</div></div>`;
+          div.innerHTML = `<div class="bus-dot ${dotCls}" style="${isHidden ? 'opacity:.2' : ''}"></div><div class="bus-item-info"><div class="nm">${d.name}</div><div class="dt">${Math.round(d.speed)} كم/س | ${d.lat?.toFixed(4)}, ${d.lng?.toFixed(4)}</div></div><button onclick="event.stopPropagation();toggleBus('${id}')" style="background:${isHidden ? '#374151' : '#25d366'};color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;flex-shrink:0">${isHidden ? 'إظهار' : 'إخفاء'}</button>`;
           div.onclick = () => selectBus(id);
           list.appendChild(div);
         });
