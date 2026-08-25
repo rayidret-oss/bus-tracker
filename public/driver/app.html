@@ -229,6 +229,7 @@
       document.getElementById('loginScreen').classList.remove('active');
       document.getElementById('trackerScreen').classList.add('active');
       document.getElementById('myBusName').textContent = user.busName || user.name;
+      startGPS();
       connectAndTrack();
     }
 
@@ -242,7 +243,6 @@
       };
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data);
-        if (msg.type === 'authOk') { startGPS(); }
         if (msg.type === 'error') { document.getElementById('connText').textContent = 'خطأ'; }
       };
       ws.onclose = () => {
@@ -278,12 +278,20 @@
 
             if (ws && ws.readyState === 1) {
               ws.send(JSON.stringify({ type: 'location', lat, lng, speed: speedKmh, heading: heading || 0, speedLimit }));
+              document.getElementById('connDot').classList.add('on');
+              document.getElementById('connText').textContent = 'متصل';
             } else {
-              fetch('/api/track', {
+              fetch(SERVER + '/api/track', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ token, lat, lng, speed: speedKmh, heading: heading || 0, speedLimit })
-              }).catch(() => {});
+              }).then(() => {
+                document.getElementById('connDot').classList.add('on');
+                document.getElementById('connText').textContent = 'متصل (HTTP)';
+              }).catch(() => {
+                document.getElementById('connDot').classList.remove('on');
+                document.getElementById('connText').textContent = 'إعادة الاتصال...';
+              });
             }
 
             document.getElementById('locBar').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)} | دقة: ${(accuracy || 0).toFixed(0)}م`;
